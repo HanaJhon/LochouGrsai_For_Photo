@@ -1,4 +1,4 @@
-# LoChou AI Studio
+# Lochou AI Studio
 
 > 一个面向 AI 图像生成的轻量级在线工具。  
 > 库中展示、示例与相关内容均源自 AI 生成。
@@ -9,7 +9,7 @@
 
 ## 项目说明
 
-LoChou AI Studio 主要用于在线 AI 生图，支持调用部分主流 Banana 模型以及 GPT Image 2 模型。当前版本聚焦于图像生成能力，没有接入聊天功能。
+Lochou AI Studio 主要用于在线 AI 生图，支持调用部分主流 Banana 模型以及 GPT Image 2 模型。当前版本聚焦于图像生成能力，没有接入聊天功能。
 
 ## 功能特性
 
