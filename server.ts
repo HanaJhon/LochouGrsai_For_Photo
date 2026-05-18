@@ -12,22 +12,36 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  app.use(express.json({ limit: '50mb' }));
+  app.use(express.json({ limit: '100mb' }));
+  app.use(express.urlencoded({ extended: true, limit: '100mb' }));
+
+  const upload = multer({ 
+    storage: multer.memoryStorage(),
+    limits: {
+      fileSize: 20 * 1024 * 1024, // 20MB per file
+      files: 10,
+      fieldSize: 100 * 1024 * 1024 // 100MB for fields
+    }
+  });
 
   // Global request logger
   app.use((req, res, next) => {
     if (req.url.startsWith('/api/')) {
-      console.log(`[Server] ${req.method} ${req.url}`);
+      console.log(`[Server] ${req.method} ${req.url} - Content-Length: ${req.headers['content-length']}`);
     }
     next();
   });
 
-  // API Proxy Endpoint - MOVE TO TOP
+  // API Proxy Endpoint
   app.post("/api/generate", (req, res, next) => {
-    upload.single('image')(req, res, (err) => {
+    upload.array('images', 9)(req, res, (err) => {
       if (err) {
         console.error('[Server] Multer error:', err);
-        return res.status(400).json({ error: "File upload failed", details: err.message });
+        return res.status(400).json({ 
+          error: "Multipart upload failed", 
+          details: err.message,
+          code: (err as any).code
+        });
       }
       next();
     });
@@ -46,7 +60,9 @@ async function startServer() {
       console.log(`[Server] Model: ${model}`);
       console.log(`[Server] Prompt length: ${prompt?.length || 0}`);
       console.log(`[Server] Target: ${custom_api_url || 'default'}`);
-      console.log(`[Server] Has Image: ${!!req.file}`);
+      
+      const files = (req.files as any[]) || [];
+      console.log(`[Server] Images attached: ${files.length}`);
 
       const isGptModel = model && (model.startsWith('gpt-image-2') || model.startsWith('gpt-video'));
 
@@ -59,10 +75,9 @@ async function startServer() {
         images: [],
       };
 
-      if (req.file) {
-        const base64Image = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
-        apiPayload.images = [base64Image];
-        console.log(`[Server] Image size: ${req.file.size} bytes`);
+      if (files.length > 0) {
+        apiPayload.images = files.map(file => `data:${file.mimetype};base64,${file.buffer.toString('base64')}`);
+        console.log(`[Server] Total buffered image size: ${files.reduce((acc, f) => acc + f.size, 0)} bytes`);
       }
 
       // Final target URL resolution
@@ -78,7 +93,6 @@ async function startServer() {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Banana/1.0',
           ...(apiKey ? { 'Authorization': apiKey.startsWith('Bearer ') ? apiKey : `Bearer ${apiKey}` } : {})
         },
-        timeout: 120000, // 2 minutes timeout for slow generations
         maxContentLength: Infinity,
         maxBodyLength: Infinity,
         validateStatus: () => true, 
@@ -102,9 +116,19 @@ async function startServer() {
       res.status(response.status).json(response.data);
     } catch (error: any) {
       console.error(`[Server] Proxy Exception:`, error.message);
-      res.status(500).json({
-        error: "Internal proxy exception",
-        details: error.message
+      
+      let statusCode = 500;
+      let errorMsg = "Internal proxy exception";
+      
+      if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
+        statusCode = 504; // Gateway Timeout
+        errorMsg = "Remote generation timed out or connection was aborted.";
+      }
+
+      res.status(statusCode).json({
+        error: errorMsg,
+        details: error.message,
+        code: error.code
       });
     }
   });
