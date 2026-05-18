@@ -28,7 +28,7 @@ interface GenerationParams {
   size: string;
   aspect_ratio: string;
   resolution: string;
-  image?: File | null;
+  images: File[];
 }
 
 interface LogEntry {
@@ -133,10 +133,12 @@ export default function App() {
     size: '1024',
     aspect_ratio: '1:1',
     resolution: '1K',
-    image: null,
+    images: [],
   });
 
   const [gptNode, setGptNode] = useState(GPT_NODES[0].url);
+  const [previewImages, setPreviewImages] = useState<string[]>([]);
+  const [isDragging, setIsDragging] = useState(false);
 
   useEffect(() => {
     // When switching tabs or models, reset invalid settings
@@ -208,23 +210,66 @@ export default function App() {
     setShowSettings(false);
   };
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setParams(prev => ({ ...prev, image: file }));
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setPreviewImage(reader.result as string);
-        addLog(`Image reference uploaded: ${file.name} (${(file.size / 1024).toFixed(1)}KB)`, 'info');
-      };
-      reader.readAsDataURL(file);
+  const processFiles = (files: FileList | File[]) => {
+    const newFiles = Array.from(files).filter(file => file.type.startsWith('image/'));
+    const totalPossible = 9 - params.images.length;
+    const filesToAdd = newFiles.slice(0, totalPossible);
+
+    if (newFiles.length > totalPossible) {
+      addLog('Reference images limited to 9. Some files were skipped.', 'warn');
+    }
+
+    if (filesToAdd.length > 0) {
+      setParams(prev => ({ ...prev, images: [...prev.images, ...filesToAdd] }));
+      
+      filesToAdd.forEach(file => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          setPreviewImages(prev => [...prev, reader.result as string]);
+        };
+        reader.readAsDataURL(file);
+      });
+      
+      addLog(`Added ${filesToAdd.length} reference image(s).`, 'info');
     }
   };
 
-  const clearImage = () => {
-    setParams(prev => ({ ...prev, image: null }));
-    setPreviewImage(null);
-    addLog('Reference image cleared.', 'warn');
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      processFiles(e.target.files);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = () => {
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    if (e.dataTransfer.files) {
+      processFiles(e.dataTransfer.files);
+    }
+  };
+
+  const removeImage = (index: number) => {
+    setParams(prev => ({
+      ...prev,
+      images: prev.images.filter((_, i) => i !== index)
+    }));
+    setPreviewImages(prev => prev.filter((_, i) => i !== index));
+    addLog('Reference image removed.', 'info');
+  };
+
+  const clearImages = () => {
+    setParams(prev => ({ ...prev, images: [] }));
+    setPreviewImages([]);
+    addLog('All reference images cleared.', 'warn');
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
@@ -298,8 +343,10 @@ export default function App() {
         formData.append('custom_api_url', cleanedUrl);
       }
 
-      if (task.params.image) {
-        formData.append('image', task.params.image);
+      if (task.params.images && task.params.images.length > 0) {
+        task.params.images.forEach(file => {
+          formData.append('images', file);
+        });
       }
 
       const response = await fetch('/api/generate', {
@@ -672,34 +719,68 @@ export default function App() {
           <div className="col-span-12 lg:col-span-6 space-y-4">
             {/* Prompt & Reference Image Bar */}
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-3 flex flex-col gap-3">
-              <div className="flex flex-row gap-3">
-                {/* Compact Reference Image Upload (Moved here) */}
+              <div className="flex flex-col gap-3">
+                {/* Advanced Multi-Image Upload Area */}
                 <div 
-                  onClick={() => fileInputRef.current?.click()}
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  onDrop={handleDrop}
                   className={cn(
-                    "w-[110px] h-[110px] shrink-0 border-2 border-dashed rounded-xl flex flex-col items-center justify-center gap-1 hover:bg-slate-950/50 transition-all cursor-pointer group relative overflow-hidden",
-                    previewImage ? "border-indigo-500/50 bg-indigo-500/5" : "border-slate-800 bg-slate-950"
+                    "min-h-[140px] border-2 border-dashed rounded-xl transition-all p-3 flex flex-col gap-3 group relative",
+                    isDragging ? "border-indigo-400 bg-indigo-500/10" : "border-slate-800 bg-slate-950",
+                    params.images.length === 0 ? "items-center justify-center cursor-pointer hover:border-slate-600" : ""
                   )}
+                  onClick={() => params.images.length === 0 && fileInputRef.current?.click()}
                 >
-                  {previewImage ? (
-                    <div className="w-full h-full relative group/img">
-                      <img src={previewImage} alt="Reference" className="w-full h-full object-cover" />
-                      <div className="absolute inset-0 bg-slate-950/40 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center">
+                  {params.images.length > 0 ? (
+                    <div className="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-9 gap-2 w-full">
+                      {previewImages.map((src, idx) => (
+                        <div key={idx} className="aspect-square relative group/img rounded-lg overflow-hidden border border-slate-800">
+                          <img src={src} alt={`Ref ${idx}`} className="w-full h-full object-cover" />
+                          <button 
+                            onClick={(e) => { e.stopPropagation(); removeImage(idx); }}
+                            className="absolute top-1 right-1 p-1 bg-red-500 rounded-md text-white opacity-0 group-hover/img:opacity-100 transition-opacity"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                      ))}
+                      {params.images.length < 9 && (
                         <button 
-                          onClick={(e) => { e.stopPropagation(); clearImage(); }}
-                          className="p-1.5 bg-red-500 rounded-lg text-white shadow-lg"
+                          onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click(); }}
+                          className="aspect-square border-2 border-dashed border-slate-800 rounded-lg flex items-center justify-center text-slate-500 hover:border-indigo-500 hover:text-indigo-400 transition-all bg-slate-900/50"
                         >
-                          <X className="w-3.5 h-3.5" />
+                          <Upload className="w-5 h-5" />
                         </button>
-                      </div>
+                      )}
                     </div>
                   ) : (
-                    <>
-                      <Upload className="w-4 h-4 text-slate-500 group-hover:text-indigo-400 transition-colors" />
-                      <span className="text-[9px] font-bold text-slate-600 uppercase tracking-tighter">参考图</span>
-                    </>
+                    <div className="flex flex-col items-center gap-2 pointer-events-none">
+                      <div className="w-10 h-10 bg-slate-900 rounded-full flex items-center justify-center border border-slate-800">
+                        <Upload className="w-5 h-5 text-slate-500" />
+                      </div>
+                      <div className="text-center">
+                        <p className="text-xs font-bold text-slate-400 uppercase tracking-tight">拖拽图片或点击上传</p>
+                        <p className="text-[10px] text-slate-600 font-mono mt-0.5 uppercase tracking-widest">Supports up to 9 reference images</p>
+                      </div>
+                    </div>
                   )}
-                  <input type="file" ref={fileInputRef} onChange={handleImageUpload} className="hidden" accept="image/*" />
+                  
+                  {params.images.length > 0 && (
+                    <div className="flex justify-between items-center mt-1 pt-2 border-t border-slate-800/50">
+                      <span className="text-[10px] text-slate-500 font-mono font-bold uppercase tracking-widest">
+                        Images: {params.images.length} / 9
+                      </span>
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); clearImages(); }}
+                        className="text-[9px] text-red-500/60 hover:text-red-500 font-bold uppercase tracking-widest"
+                      >
+                        Clear All
+                      </button>
+                    </div>
+                  )}
+                  
+                  <input type="file" ref={fileInputRef} onChange={handleImageUpload} className="hidden" accept="image/*" multiple />
                 </div>
 
                 <div className="flex-1 relative">
