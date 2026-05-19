@@ -26,15 +26,15 @@ Lochou AI Studio 主要用于在线 AI 生图，支持调用部分主流 Banana 
 
 ### GPT Image 2 模型
 
-![GPT Image 2 模型界面](assets/gpt-image-2.png)
+![GPT Image 2 模型界面](https://raw.githubusercontent.com/HanaJhon/LochouGrsai_For_Web/0548a10f8aa34e28623ace0f9a0fac931806d4db/assets/gpt-image-2.png)
 
 ### Banana 模型
 
-![Banana 模型界面](assets/banana.png)
+![Banana 模型界面](https://raw.githubusercontent.com/HanaJhon/LochouGrsai_For_Web/0548a10f8aa34e28623ace0f9a0fac931806d4db/assets/banana.png)
 
 ### API 端点配置
 
-![API 端点配置](assets/api-config.png)
+![API 端点配置](https://raw.githubusercontent.com/HanaJhon/LochouGrsai_For_Web/0548a10f8aa34e28623ace0f9a0fac931806d4db/assets/api-config.png)
 
 ## 使用方式
 
