@@ -9,7 +9,7 @@
 
 ## 项目说明
 
-项目已迁移至“https://github.com/HanaJhon/LochouGrsai”
+项目已迁移至“https://github.com/HanaJhon/LochouGrsai”  
 Lochou AI Studio 主要用于在线 AI 生图，支持调用部分主流 Banana 模型以及 GPT Image 2 模型。当前版本聚焦于图像生成能力，没有接入聊天功能。
 
 ## 功能特性
